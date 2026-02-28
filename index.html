@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SOLANAcci | Solana育成ゲーム</title>
+  <meta name="description" content="SOLANAcciはSolanaの世界観で遊ぶ育成ゲーム。タマゴから進化、IQ、レア分岐、将来的にNFT化も。" />
+  <meta property="og:title" content="SOLANAcci | Solana育成ゲーム" />
+  <meta property="og:description" content="タマゴ→進化→育成。まずは遊べる形から段階実装。" />
+  <meta property="og:type" content="website" />
+  <style>
+    :root { --bg:#0b0f1a; --card:#121a2b; --text:#e8eefc; --muted:#aab6d3; --accent:#6ee7ff; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif;background:linear-gradient(180deg,#070a12, #0b0f1a);color:var(--text)}
+    a{color:inherit}
+    .wrap{max-width:980px;margin:0 auto;padding:28px}
+    .nav{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:.2px}
+    .logo{width:38px;height:38px;border-radius:10px;background:radial-gradient(circle at 30% 30%, var(--accent), #7c3aed);box-shadow:0 10px 30px rgba(110,231,255,.12)}
+    .pill{padding:10px 14px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);text-decoration:none}
+    .hero{margin-top:26px;padding:26px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}
+    h1{margin:0 0 10px;font-size:40px;line-height:1.1}
+    p{margin:0;color:var(--muted);line-height:1.7}
+    .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px;border-radius:14px;text-decoration:none;border:1px solid rgba(255,255,255,.12)}
+    .btn.primary{background:linear-gradient(90deg, rgba(110,231,255,.22), rgba(124,58,237,.22));border-color:rgba(110,231,255,.35)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
+    .card{padding:16px;border-radius:16px;background:rgba(18,26,43,.72);border:1px solid rgba(255,255,255,.08)}
+    .kicker{font-size:12px;color:rgba(110,231,255,.9);font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+    .section{margin-top:26px}
+    .shots{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+    .shot{aspect-ratio:9/16;border-radius:16px;background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.45)}
+    .footer{margin-top:34px;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.55);font-size:13px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between}
+    @media (max-width:820px){ .grid,.shots{grid-template-columns:1fr} h1{font-size:32px} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav">
+      <div class="brand"><div class="logo"></div> SOLANAcci</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="pill" href="/play">遊ぶ</a>
+        <a class="pill" href="#download">ダウンロード</a>
+        <a class="pill" href="#setup">初期設定</a>
+        <a class="pill" href="#howto">遊び方</a>
+        <a class="pill" href="#solcci">SOLCCI</a>
+        <a class="pill" href="#roadmap">ロードマップ</a>
+        <a class="pill" href="#faq">FAQ</a>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div class="kicker">Solana 育成ゲーム</div>
+      <h1>タマゴから育てる、<br/>あなたの相棒。</h1>
+      <p>Solanacciは、進化・IQ・お世話要素がある育成ゲーム。まずは「遊べる」ことを最優先に段階実装し、将来的にNFT化にも対応。</p>
+
+      <div class="cta">
+        <a class="btn primary" href="/play" id="playBtn">今すぐ遊ぶ（Web）</a>
+        <a class="btn" href="#download" id="downloadBtn">ダウンロード（Android / iOS）</a>
+        <a class="btn" href="#setup">初期設定</a>
+      </div>
+
+      <p style="margin-top:10px;font-size:13px">
+        ※決済は SOLCCI（※SOLではありません）。ウォレット/Phantomが必要です → <a href="#setup">初期設定を見る</a>
+      </p>
+    </div>
+
+    <div class="section" id="features">
+      <h2 style="margin:0 0 10px">特徴</h2>
+      <div class="grid">
+        <div class="card">
+          <div class="kicker">育成</div>
+          <div style="font-weight:800;margin-top:6px">お世話で変化</div>
+          <p>エサ・掃除・放置ペナルティなど、日々の行動が成長に反映。</p>
+        </div>
+        <div class="card">
+          <div class="kicker">進化</div>
+          <div style="font-weight:800;margin-top:6px">分岐＆レア</div>
+          <p>タマゴ→Lv1→Lv2→…の分岐。レア枠も用意。</p>
+        </div>
+        <div class="card">
+          <div class="kicker">将来</div>
+          <div style="font-weight:800;margin-top:6px">NFT化にも拡張</div>
+          <p>まずはゲームとして成立→その後に段階的にWeb3要素を追加。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="media">
+      <h2 style="margin:0 0 10px">スクリーンショット</h2>
+      <p>ここに画像（png/jpg）を差し替えると一気に信頼感が上がります。</p>
+      <div class="shots">
+        <div class="shot">shot 1</div>
+        <div class="shot">shot 2</div>
+        <div class="shot">shot 3</div>
+      </div>
+    </div>
+
+    <div class="section" id="download">
+  <h2 style="margin:0 0 10px">ダウンロード</h2>
+  <div class="grid">
+    <div class="card">
+      <div style="font-weight:800">Android</div>
+      <p>公式リンクから安全にインストール。</p>
+      <a class="btn" href="#" id="androidBtn">Androidを入れる</a>
+    </div>
+    <div class="card">
+      <div style="font-weight:800">iOS</div>
+      <p>TestFlightなどで配布予定。</p>
+      <a class="btn" href="#" id="iosBtn">iOSを入れる</a>
+    </div>
+    <div class="card">
+      <div style="font-weight:800">Web</div>
+      <p>PC/スマホのブラウザで遊べます。</p>
+      <a class="btn primary" href="/play">今すぐ遊ぶ</a>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="setup">
+  <h2 style="margin:0 0 10px">初期設定</h2>
+  <div class="card">
+    <ol style="margin:0;padding-left:18px;color:var(--muted);line-height:1.9">
+      <li>Phantomをインストール</li>
+      <li>ウォレットを作成</li>
+      <li>SOLCCI（※SOLではありません）を確認</li>
+      <li>決済は手動Approve → confirmed → 付与</li>
+    </ol>
+  </div>
+</div>
+
+<div class="section" id="solcci">
+  <h2 style="margin:0 0 10px">SOLCCI</h2>
+  <div class="grid">
+    <div class="card">
+      <div style="font-weight:800">何が買える？</div>
+      <p>卵 / 復活 / 高級肉</p>
+    </div>
+    <div class="card">
+      <div style="font-weight:800">どう反映される？</div>
+      <p>Approve → confirmed → ゲーム内に付与</p>
+    </div>
+    <div class="card">
+      <div style="font-weight:800">注意</div>
+      <p>SOLではなくSOLCCIを使用します。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" id="howto">
+  <h2 style="margin:0 0 10px">遊び方</h2>
+  <div class="card">
+    <p>卵 → 孵化 → お世話 → 図鑑登録。詳細は後で図解に差し替え。</p>
+  </div>
+</div>
+
+
+
+    <div class="section" id="roadmap">
+      <h2 style="margin:0 0 10px">ロードマップ</h2>
+      <div class="card">
+        <ol style="margin:0;padding-left:18px;color:var(--muted);line-height:1.9">
+          <li>まずは育成ゲームとして完成（安定動作・セーブ・UI）</li>
+          <li>Android公開（Play or APK配布）</li>
+          <li>課金/アイテム購入の導線を整備（段階実装）</li>
+          <li>Web3要素（ウォレット連携/NFT化）を必要に応じて追加</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="section" id="faq">
+      <h2 style="margin:0 0 10px">FAQ</h2>
+      <div class="grid">
+        <div class="card">
+          <div style="font-weight:800">APKは安全？</div>
+          <p>配布ページにSHA-256（ハッシュ）を載せ、HTTPSで配布します。</p>
+        </div>
+        <div class="card">
+          <div style="font-weight:800">Playストアはいつ？</div>
+          <p>準備でき次第。まずは遊べる版を優先して公開します。</p>
+        </div>
+        <div class="card">
+          <div style="font-weight:800">ウォレットは必須？</div>
+          <p>最初は必須にしない方が導入が簡単。必要になったら追加します。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="waitlist">
+      <h2 style="margin:0 0 10px">最新情報（待機リスト）</h2>
+      <div class="card">
+        <p>Googleフォーム等のリンクを置くのが簡単です。</p>
+        <a class="btn" href="#" id="formBtn">フォームを開く</a>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>© <span id="y"></span> SOLANAcci</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a href="#">利用規約</a>
+        <a href="#">プライバシーポリシー</a>
+        <a href="#">お問い合わせ</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  document.getElementById("y").textContent = new Date().getFullYear();
+  // 任意：実リンクが決まったら差し替え
+  // document.getElementById("androidBtn").href = "https://...";
+  // document.getElementById("iosBtn").href = "https://...";
+</script>
+</body>
+</html>

@@ -1,0 +1,860 @@
+<!-- ✅ bridge.html（全文差し替え版 / 2026-02-28 最新仕様整合：SOLCCI SPL / MAINNET / MANUAL APPROVE 固定）
+  反映したこと（今回）
+  - UIを整理：上部は「接続・poll・pending・Approve」だけに集中（ボタンも簡潔）
+  - “SOLCCI入手”はここでは扱わない（Flutter側Shopの補助導線へ移動済み）
+  - MANUAL APPROVE を絶対維持：payRequest検知＝pending表示のみ / Approveボタン押下でのみ doPay
+  - payRequest → callback(id,status,signature,error) の一貫性を強制
+  - SPL Token: TransferChecked(decimals=9) + 必要ならATA作成（NO spl-token library）
+  - Token Program（Tokenkeg or Token-2022）は mint account owner を自動判定（mainnet固定）
+
+  注意
+  - サーバ仕様（/payRequest, /callback, /reset, /status）は phantom_bridge_server.dart（あなたのNEW SPEC）前提
+  - “User ATA not found” は「ユーザーがSOLCCIを持っていない/ATAがない」状態。ここはエラーでOK（補助導線はFlutter側）
+-->
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Phantom Bridge</title>
+  <link rel="icon" href="data:,">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; }
+    .row { display:flex; gap: 8px; flex-wrap: wrap; align-items:center; margin-bottom: 10px; }
+    .pill { padding: 4px 10px; border-radius: 999px; background:#eee; font-size: 12px; }
+    .muted { color:#666; }
+    .ok { color:#0a7; }
+    .ng { color:#c33; }
+    button { padding: 8px 12px; }
+    input { padding: 8px; min-width: 340px; }
+    pre { background:#111; color:#ddd; padding: 12px; border-radius: 10px; height: 360px; overflow:auto; }
+    .box { border: 1px solid #ddd; border-radius: 12px; padding: 12px; }
+    .label { font-size: 12px; color:#666; }
+    .val { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .small { font-size: 12px; }
+  </style>
+
+  <!-- solana web3 (IIFE min) -->
+  <script src="./solana-web3.min.js"></script>
+</head>
+
+<body>
+  <h2>Phantom Bridge (Windows) ✅ BUILD-1027 (SOLCCI SPL / MAINNET / MANUAL APPROVE)</h2>
+
+  <div class="row">
+    <span id="pillConn" class="pill">conn: -</span>
+    <span id="pillPoll" class="pill">poll: -</span>
+    <span id="pillPending" class="pill">pending: -</span>
+    <button id="btnApproveRequest" disabled>Approve (no request)</button>
+    <span id="statusLine" class="muted">status: -</span>
+  </div>
+
+  <div class="box">
+    <div class="row">
+      <button id="btnConnect">Connect</button>
+      <button id="btnDisconnect" disabled>Disconnect</button>
+      <button id="btnCopy" disabled>Copy Pubkey</button>
+      <button id="btnPay">UI Test Pay (SOLCCI)</button>
+      <button id="btnClear">Clear Log</button>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">Connected Pubkey</div>
+        <div id="txtPubkey" class="val">-</div>
+      </div>
+      <div style="flex:1"></div>
+      <div>
+        <div class="label">Cluster</div>
+        <div id="txtBase" class="val">mainnet-beta</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">SOLCCI Mint（固定）</div>
+        <input id="inpMint" class="val" />
+      </div>
+      <div>
+        <div class="label">Merchant Owner（受取Owner / 固定）</div>
+        <input id="inpMerchantOwner" class="val" />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">UI Test Amount（SOLCCI / 整数）</div>
+        <input id="inpUiAmount" class="val" value="1" />
+      </div>
+      <div style="flex:1"></div>
+    </div>
+
+    <div class="row muted small">
+      ※本筋：Flutter→/pay → bridgeが /payRequest を拾う → Approve(手動) → Phantom → /callback → Flutter→/payResult?id → 付与 → /reset
+    </div>
+
+    <div class="row muted small">
+      RPC: <span id="txtRpc" class="val">-</span>
+    </div>
+
+    <div class="row muted small">
+      Token Program(auto): <span id="txtTokenProgram" class="val">-</span>
+      / decimals: <span id="txtDecimals" class="val">9</span>
+    </div>
+
+    <div class="row muted small">
+      fromATA: <span id="txtFromAta" class="val">-</span>
+    </div>
+    <div class="row muted small">
+      toATA: <span id="txtToAta" class="val">-</span>
+    </div>
+  </div>
+
+  <h3>Log</h3>
+  <pre id="log"></pre>
+
+<script>
+  // =========================
+  // BUILD / DOM
+  // =========================
+  const BUILD_ID = "BUILD-1027";
+  const $ = (id) => document.getElementById(id);
+
+  const $btnConnect = $("btnConnect");
+  const $btnDisconnect = $("btnDisconnect");
+  const $btnCopy = $("btnCopy");
+  const $btnPay = $("btnPay");
+  const $btnClear = $("btnClear");
+
+  const $btnApproveRequest = $("btnApproveRequest");
+  const $pillPending = $("pillPending");
+
+  const $pillConn = $("pillConn");
+  const $pillPoll = $("pillPoll");
+  const $txtPubkey = $("txtPubkey");
+  const $txtBase = $("txtBase");
+  const $txtRpc = $("txtRpc");
+  const $statusLine = $("statusLine");
+
+  const $inpMint = $("inpMint");
+  const $inpMerchantOwner = $("inpMerchantOwner");
+  const $inpUiAmount = $("inpUiAmount");
+
+  const $txtTokenProgram = $("txtTokenProgram");
+  const $txtDecimals = $("txtDecimals");
+  const $txtFromAta = $("txtFromAta");
+  const $txtToAta = $("txtToAta");
+
+  const $log = $("log");
+
+  // =========================
+  // 固定: SOLCCI
+  // =========================
+  const SOLCCI_MINT = "Gjmu1rMWYEbAYkGX5BxdR6Dni5bbUDKfYAVPUqG5mSTw";
+  const SOLCCI_DECIMALS = 9; // ✅固定
+
+  // 運営受取 owner（SPLは owner のATAに送る）
+  const MERCHANT_OWNER_DEFAULT = "F7jKUFsmh6REYruw8EqhjGE4HDmJTZmrLFZmeY6SMuzz";
+
+  // =========================
+  // Cluster config (MAINNET)
+  // =========================
+  const CLUSTER = "mainnet-beta";
+  const COMMITMENT = "confirmed";
+
+  // ✅ APIキー付きRPCを最優先
+  const RPC_CANDIDATES = [
+    "https://mainnet.helius-rpc.com/?api-key=0fbcd731-0788-4371-bdd0-e2564a6e710f",
+  ];
+
+  // =========================
+  // Logging / status
+  // =========================
+  function now() {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  function log(msg) {
+    const line = `[${now()}] [bridge] ${msg}\n`;
+    $log.textContent += line;
+    $log.scrollTop = $log.scrollHeight;
+    console.log(line.trimEnd());
+  }
+
+  function setStatus(msg, tone = "muted", writeLog = true) {
+    $statusLine.className = tone;
+    $statusLine.textContent = "status: " + msg;
+    if (writeLog) log(msg);
+  }
+
+  // =========================
+  // Solana / Phantom basics
+  // =========================
+  function assertSolanaWeb3() {
+    if (typeof solanaWeb3 === "undefined") {
+      throw new Error("solanaWeb3 is not defined. Check ./solana-web3.min.js load/MIME.");
+    }
+    if (!solanaWeb3.PublicKey || !solanaWeb3.Connection || !solanaWeb3.Transaction) {
+      throw new Error("solanaWeb3 seems incomplete.");
+    }
+  }
+
+  function getProvider() {
+    const p = window.solana;
+    if (p && p.isPhantom) return p;
+    return null;
+  }
+
+  // =========================
+  // Bridge state
+  // =========================
+  let provider = null;
+  let currentPubkey = null;
+
+  let payInFlight = false;
+  let lastRequestKey = null;
+
+  let activeRpc = null;
+  let connection = null;
+
+  // mint -> token program id cache
+  let cachedTokenProgramId = null;
+
+  // =========================
+  // Pending request / manual approve
+  // =========================
+  let pendingReq = null;
+  let pendingReqKey = "";
+  let pendingSinceMs = 0;
+
+  function setPending(req, reqKey) {
+    pendingReq = req;
+    pendingReqKey = reqKey || "";
+    pendingSinceMs = Date.now();
+
+    const id = String(req?.id || "").trim();
+    const to = String(req?.toAddress || "").trim();
+    const uiAmount = Number(req?.uiAmount ?? 0);
+
+    $pillPending.textContent = id ? `pending: ${id}` : "pending: ?";
+    $btnApproveRequest.disabled = false;
+    $btnApproveRequest.textContent = `Approve (SOLCCI=${uiAmount})`;
+
+    log(`[ui] pending ready. Click Approve. id=${id} toOwner=${to} SOLCCI=${uiAmount}`);
+  }
+
+  function clearPending(reason = "") {
+    pendingReq = null;
+    pendingReqKey = "";
+    pendingSinceMs = 0;
+
+    $pillPending.textContent = "pending: -";
+    $btnApproveRequest.disabled = true;
+    $btnApproveRequest.textContent = "Approve (no request)";
+
+    if (reason) log(`[ui] pending cleared: ${reason}`);
+  }
+
+  // =========================
+  // Utils (HTTP)
+  // =========================
+  async function safeReadText(res) {
+    try { return await res.text(); } catch (_) { return ""; }
+  }
+
+  async function getJson(path) {
+    const res = await fetch(path, { method: "GET", cache: "no-store" });
+    const text = await safeReadText(res);
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch (_) {}
+    return { ok: res.ok, status: res.status, text, json };
+  }
+
+  async function postJson(path, bodyObj) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(bodyObj ?? {}),
+    });
+    const text = await safeReadText(res);
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch (_) {}
+    return { ok: res.ok, status: res.status, text, json };
+  }
+
+  function withTimeout(promise, ms, label) {
+    let t;
+    const timeout = new Promise((_, rej) => {
+      t = setTimeout(() => rej(new Error(`${label} timeout ${ms}ms`)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+  }
+
+  function makeRequestKey(req) {
+    if (!req) return null;
+    const id = (req.id || "").toString();
+    const to = (req.toAddress || "").toString();
+    const amt = (req.uiAmount ?? "").toString();
+    if (!id) return null;
+    return `${id}|${to}|${amt}`;
+  }
+
+  // =========================
+  // RPC selection
+  // =========================
+  async function ensureRpcReady() {
+    assertSolanaWeb3();
+    log("ensureRpcReady: ENTER");
+    log("RPC_CANDIDATES=" + RPC_CANDIDATES.join(" | "));
+
+    if (connection && activeRpc) {
+      log("ensureRpcReady: already ready -> " + activeRpc);
+      return true;
+    }
+
+    connection = null;
+    activeRpc = null;
+
+    for (const rpc of RPC_CANDIDATES) {
+      try {
+        log("ensureRpcReady: try " + rpc);
+        const c = new solanaWeb3.Connection(rpc, COMMITMENT);
+        await c.getLatestBlockhash(COMMITMENT);
+        connection = c;
+        activeRpc = rpc;
+        $txtRpc.textContent = rpc;
+        log("RPC OK: " + rpc);
+        log("ACTIVE RPC=" + activeRpc);
+        return true;
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e);
+        log("RPC NG: " + rpc + " -> " + msg);
+      }
+    }
+
+    $txtRpc.textContent = "NO WORKING RPC";
+    throw new Error("No working RPC endpoint (CORS/403). Use a working API-key RPC.");
+  }
+
+  // =========================
+  // Phantom connect/disconnect
+  // =========================
+  async function notifyConnected(pubkey) {
+    const incoming = String(pubkey || "").trim();
+
+    let real = null;
+    try {
+      const p = getProvider();
+      if (p && p.publicKey) real = p.publicKey.toString();
+    } catch (_) {}
+
+    if (real && incoming && real !== incoming) {
+      log(`WARN: notifyConnected got '${incoming}', but provider.publicKey is '${real}' (using provider key)`);
+    }
+
+    currentPubkey = real || incoming;
+    updateButtons();
+    log(`connected ✔ ${currentPubkey}`);
+    setStatus("connected", "ok", false);
+  }
+
+  function updateButtons() {
+    const connected = !!currentPubkey;
+    $pillConn.textContent = connected ? "conn: ok" : "conn: -";
+    $txtPubkey.textContent = connected ? currentPubkey : "-";
+    $btnDisconnect.disabled = !connected;
+    $btnCopy.disabled = !connected;
+    $btnPay.disabled = false;
+  }
+
+  async function connectPhantom({ silent } = {}) {
+    provider = getProvider();
+    if (!provider) {
+      setStatus("Phantom provider not found. (Install Phantom extension)", "ng");
+      throw new Error("Phantom provider not found");
+    }
+
+    if (silent) {
+      log("checking trusted connection...");
+      try {
+        const r = await provider.connect({ onlyIfTrusted: true });
+        if (r && r.publicKey) {
+          await notifyConnected(r.publicKey.toString());
+          return true;
+        }
+        return false;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    log("connecting to Phantom...");
+    const r = await provider.connect();
+    if (r && r.publicKey) {
+      await notifyConnected(r.publicKey.toString());
+      return true;
+    }
+    return false;
+  }
+
+  async function disconnectPhantom() {
+    provider = getProvider();
+    if (!provider) return;
+    try { await provider.disconnect(); } catch (_) {}
+    currentPubkey = null;
+    updateButtons();
+    setStatus("disconnected", "muted");
+  }
+
+  // =========================
+  // Callback (NEW SPEC)
+  // =========================
+  async function postCallback(payload) {
+    const id = String(payload?.id || "").trim();
+    if (!id) {
+      log("WARN: postCallback called with empty id (skip)");
+      return { ok: false, status: 0, text: "", json: null };
+    }
+    const r = await postJson("/callback", payload);
+    if (!r.ok) {
+      log(`WARN: /callback failed (${r.status}) ${r.text}`);
+    } else {
+      log(`/callback ok (${r.status}) ${payload.status}`);
+    }
+    return r;
+  }
+
+  // =========================
+  // SPL (NO spl-token): Programs / ATA / Instructions
+  // =========================
+  const ASSOCIATED_TOKEN_PROGRAM_ID = new solanaWeb3.PublicKey(
+    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+  );
+  const SYSVAR_RENT_PUBKEY = new solanaWeb3.PublicKey(
+    "SysvarRent111111111111111111111111111111111"
+  );
+
+  function u64LE(nBigInt) {
+    let x = BigInt(nBigInt);
+    const out = new Uint8Array(8);
+    for (let i = 0; i < 8; i++) {
+      out[i] = Number(x & 0xffn);
+      x >>= 8n;
+    }
+    return out;
+  }
+
+  async function deriveAta({ mint, owner, tokenProgramId }) {
+    const seeds = [owner.toBuffer(), tokenProgramId.toBuffer(), mint.toBuffer()];
+    const [ata] = await solanaWeb3.PublicKey.findProgramAddress(
+      seeds,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    return ata;
+  }
+
+  function ixCreateAta({ payer, ata, owner, mint, tokenProgramId }) {
+    // Associated Token Account Program instruction = 0 (create)
+    const data = Uint8Array.from([0]);
+    const keys = [
+      { pubkey: payer, isSigner: true,  isWritable: true },
+      { pubkey: ata,   isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: false, isWritable: false },
+      { pubkey: mint,  isSigner: false, isWritable: false },
+      { pubkey: solanaWeb3.SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+    ];
+    return new solanaWeb3.TransactionInstruction({
+      programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+      keys,
+      data,
+    });
+  }
+
+  function ixTransferChecked({ fromAta, mint, toAta, owner, amount, decimals, tokenProgramId }) {
+    // Token instruction: TransferChecked = 12
+    // data: [12] + u64(amount LE) + [decimals]
+    const data = new Uint8Array(1 + 8 + 1);
+    data[0] = 12;
+    data.set(u64LE(amount), 1);
+    data[9] = Number(decimals) & 0xff;
+
+    const keys = [
+      { pubkey: fromAta, isSigner: false, isWritable: true },
+      { pubkey: mint,    isSigner: false, isWritable: false },
+      { pubkey: toAta,   isSigner: false, isWritable: true },
+      { pubkey: owner,   isSigner: true,  isWritable: false },
+    ];
+
+    return new solanaWeb3.TransactionInstruction({
+      programId: tokenProgramId,
+      keys,
+      data,
+    });
+  }
+
+  async function ensureMintProgramId(mintPubkey) {
+    await ensureRpcReady();
+    const acc = await connection.getAccountInfo(mintPubkey, COMMITMENT);
+    if (!acc) throw new Error("Mint account not found: " + mintPubkey.toString());
+
+    cachedTokenProgramId = acc.owner; // Token Program or Token-2022
+    $txtTokenProgram.textContent = cachedTokenProgramId.toString();
+    $txtDecimals.textContent = String(SOLCCI_DECIMALS);
+    log(`mint programId detected: ${cachedTokenProgramId.toString()} decimals=${SOLCCI_DECIMALS}`);
+    return cachedTokenProgramId;
+  }
+
+  async function computeAtas({ mint, fromOwner, toOwner, tokenProgramId }) {
+    const fromAta = await deriveAta({ mint, owner: fromOwner, tokenProgramId });
+    const toAta   = await deriveAta({ mint, owner: toOwner,   tokenProgramId });
+    $txtFromAta.textContent = fromAta.toString();
+    $txtToAta.textContent = toAta.toString();
+    return { fromAta, toAta };
+  }
+
+  // =========================
+  // Pay core (SOLCCI SPL)
+  // =========================
+  async function doPaySolcci(toOwnerAddress, uiAmount, ctx = {}, opts = {}) {
+    assertSolanaWeb3();
+    await ensureRpcReady();
+    log("doPaySolcci: using ACTIVE RPC=" + activeRpc);
+
+    if (payInFlight) throw new Error("pay already in flight");
+    payInFlight = true;
+
+    const sendCallback = !!opts.sendCallback;
+    const cbId = String(opts.callbackId || "").trim();
+
+    try {
+      log("MARK doPay SOLCCI (NO spl-token / TransferChecked)");
+
+      const pvd = getProvider();
+      if (!pvd) throw new Error("Phantom provider not found");
+
+      if (!pvd.publicKey) await connectPhantom({ silent: true });
+      if (!pvd.publicKey) await connectPhantom({ silent: false });
+      if (!pvd.publicKey) throw new Error("Phantom not connected (no publicKey)");
+
+      const fromOwner = pvd.publicKey;
+
+      const toOwnerStr = String(toOwnerAddress || "").trim();
+      if (!toOwnerStr) throw new Error("invalid toOwnerAddress (empty)");
+      const toOwner = new solanaWeb3.PublicKey(toOwnerStr);
+
+      const mint = new solanaWeb3.PublicKey(SOLCCI_MINT);
+
+      const n = Number(uiAmount);
+      if (!Number.isFinite(n) || n <= 0) throw new Error(`invalid uiAmount: ${uiAmount}`);
+      if (!Number.isInteger(n)) throw new Error("uiAmount must be integer (e.g., 1, 2, 10)");
+
+      await notifyConnected(fromOwner.toString());
+      log(`pay(SOLCCI): fromOwner=${fromOwner.toString()} toOwner=${toOwner.toString()} uiAmount=${n}`);
+
+      const tokenProgramId = await ensureMintProgramId(mint);
+      const { fromAta, toAta } = await computeAtas({ mint, fromOwner, toOwner, tokenProgramId });
+
+      // fromATA must exist（ユーザーがSOLCCIを持っていない/ATAがないならここで止める）
+      const fromAtaInfo = await connection.getAccountInfo(fromAta, COMMITMENT);
+      if (!fromAtaInfo) {
+        throw new Error("User ATA not found (no SOLCCI token account / no SOLCCI balance yet).");
+      }
+
+      const toAtaInfo = await connection.getAccountInfo(toAta, COMMITMENT);
+
+      const decimals = SOLCCI_DECIMALS;
+      const amount = BigInt(n) * (10n ** BigInt(decimals));
+
+      const latest = await connection.getLatestBlockhash(COMMITMENT);
+      const tx = new solanaWeb3.Transaction({
+        feePayer: fromOwner,
+        recentBlockhash: latest.blockhash,
+      });
+
+      // Create merchant ATA if not exists
+      if (!toAtaInfo) {
+        log("toATA not found -> add create ATA ix");
+        tx.add(ixCreateAta({
+          payer: fromOwner,
+          ata: toAta,
+          owner: toOwner,
+          mint,
+          tokenProgramId,
+        }));
+      }
+
+      // TransferChecked
+      tx.add(ixTransferChecked({
+        fromAta,
+        mint,
+        toAta,
+        owner: fromOwner,
+        amount,
+        decimals,
+        tokenProgramId,
+      }));
+
+      // Phantom sign (user gesture is ensured by Approve button in normal flow)
+      log("signing transaction...");
+      const signed = await withTimeout(pvd.signTransaction(tx), 45000, "signTransaction");
+      log("signing transaction... done");
+
+      // send raw
+      log("sending transaction...");
+      let sig;
+      try {
+        sig = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e);
+        log("sendRawTransaction ERROR: " + msg);
+
+        if (sendCallback && cbId) {
+          await postCallback({ id: cbId, status: "error", error: msg, signature: null, meta: ctx });
+        }
+        throw e;
+      }
+
+      if (sendCallback && cbId) {
+        await postCallback({ id: cbId, status: "sent", signature: sig, meta: ctx });
+      }
+
+      log("waiting for confirmation...");
+      const conf = await connection.confirmTransaction(
+        { signature: sig, blockhash: latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight },
+        COMMITMENT
+      );
+      if (conf?.value?.err) throw new Error("Transaction error: " + JSON.stringify(conf.value.err));
+
+      log(`payment confirmed ✔ ${sig}`);
+      if (sendCallback && cbId) {
+        await postCallback({ id: cbId, status: "confirmed", signature: sig, meta: ctx });
+      }
+      return sig;
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      if (sendCallback && cbId) {
+        await postCallback({ id: cbId, status: "error", error: msg, signature: null, meta: ctx });
+      }
+      throw e;
+    } finally {
+      payInFlight = false;
+    }
+  }
+
+  // =========================
+  // UI Test Pay (SOLCCI)
+  // =========================
+  async function testPaySolcci() {
+    const toOwner = String($inpMerchantOwner.value || "").trim() || MERCHANT_OWNER_DEFAULT;
+    const uiAmount = Number($inpUiAmount.value || 0);
+    try {
+      setStatus("UI test pay (SOLCCI) start", "muted");
+      const sig = await doPaySolcci(toOwner, uiAmount, { ui: true }, { sendCallback: false });
+      setStatus("UI test pay (SOLCCI) success: " + sig, "ok");
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      setStatus("UI test pay (SOLCCI) error: " + msg, "ng");
+    }
+  }
+
+  // =========================
+  // Poll /payRequest loop (MANUAL APPROVE版)
+  // =========================
+  async function pollPayRequestLoop() {
+    let okCount = 0;
+    let ngCount = 0;
+    $pillPoll.textContent = "poll: on (0/0)";
+
+    while (true) {
+      try {
+        const r = await getJson("/payRequest");
+        if (!r.ok) {
+          ngCount++;
+          await new Promise(res => setTimeout(res, 800));
+          continue;
+        }
+
+        const body = r.json;
+        if (!body || body.ok !== true) {
+          await new Promise(res => setTimeout(res, 800));
+          continue;
+        }
+
+        if (body.hasRequest !== true) {
+          await new Promise(res => setTimeout(res, 800));
+          continue;
+        }
+
+        const req = body.request;
+        if (!req) {
+          await new Promise(res => setTimeout(res, 800));
+          continue;
+        }
+
+        // ✅ 必須：id / toAddress / uiAmount
+        const id = String(req.id || "").trim();
+        const to = String(req.toAddress || "").trim();
+        const uiAmount = Number(req.uiAmount ?? 0);
+        if (!id || !to || !Number.isFinite(uiAmount) || uiAmount <= 0) {
+          await new Promise(res => setTimeout(res, 800));
+          continue;
+        }
+
+        const reqKey = makeRequestKey(req);
+        if (!reqKey) {
+          await new Promise(res => setTimeout(res, 800));
+          continue;
+        }
+
+        if (pendingReqKey && reqKey === pendingReqKey) {
+          await new Promise(res => setTimeout(res, 800));
+          continue;
+        }
+
+        if (reqKey === lastRequestKey && !pendingReq) {
+          await new Promise(res => setTimeout(res, 800));
+          continue;
+        }
+
+        lastRequestKey = reqKey;
+        log(`payRequest detected: id=${id} toOwner=${to} SOLCCI=${uiAmount}`);
+
+        // ✅ request検知＝pending表示のみ（自動送金しない）
+        setPending(req, reqKey);
+        okCount++;
+      } catch (_) {
+        ngCount++;
+      } finally {
+        $pillPoll.textContent = `poll: on (${okCount}/${ngCount})`;
+        await new Promise(res => setTimeout(res, 800));
+      }
+    }
+  }
+
+  // =========================
+  // UI wiring
+  // =========================
+  $btnClear.addEventListener("click", () => {
+    $log.textContent = "";
+    log("log cleared");
+  });
+
+  $btnConnect.addEventListener("click", async () => {
+    log("btnConnect clicked");
+    try { await connectPhantom({ silent: false }); } catch (_) {}
+  });
+
+  $btnDisconnect.addEventListener("click", async () => {
+    log("btnDisconnect clicked");
+    await disconnectPhantom();
+  });
+
+  $btnCopy.addEventListener("click", async () => {
+    try {
+      if (currentPubkey) {
+        await navigator.clipboard.writeText(currentPubkey);
+        setStatus("copied", "ok");
+      }
+    } catch (_) {}
+  });
+
+  $btnPay.addEventListener("click", async () => {
+    if (payInFlight) { log("btnPay ignored: payInFlight"); return; }
+    log("btnPay clicked");
+    await testPaySolcci();
+  });
+
+  // ✅ Manual approve button (user gesture -> Phantom popup)
+  $btnApproveRequest.addEventListener("click", async () => {
+    if (!pendingReq) {
+      log("[ui] Approve clicked but no pending request");
+      return;
+    }
+    if (payInFlight) {
+      log("[ui] Approve ignored: payInFlight");
+      return;
+    }
+
+    const req = pendingReq;
+    const id = String(req?.id || "").trim();
+    const toOwner = String(req?.toAddress || "").trim();
+    const uiAmount = Number(req?.uiAmount ?? 0);
+
+    if (!id || !toOwner || !Number.isFinite(uiAmount) || uiAmount <= 0) {
+      log("[ui] Approve invalid request payload");
+      return;
+    }
+
+    $btnApproveRequest.disabled = true;
+    log(`[ui] Approve clicked -> doPaySolcci start id=${id}`);
+
+    try {
+      await doPaySolcci(
+        toOwner,
+        uiAmount,
+        (req.meta || {}),
+        { sendCallback: true, callbackId: id }
+      );
+      clearPending("confirmed");
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      log("[ui] doPaySolcci ERROR: " + msg);
+
+      // ✅ 失敗も callback に残す（サーバ側が error にする）
+      if (id) await postCallback({ id, status: "error", error: msg, signature: null, meta: (req.meta || {}) });
+
+      // 再試行できるよう復帰
+      $btnApproveRequest.disabled = false;
+    }
+  });
+
+  // =========================
+  // Boot
+  // =========================
+  window.addEventListener("load", async () => {
+    try {
+      log("boot: start");
+      log("BUILD_ID=" + BUILD_ID);
+      assertSolanaWeb3();
+
+      $txtBase.textContent = CLUSTER;
+      $inpMint.value = SOLCCI_MINT;
+      $inpMerchantOwner.value = MERCHANT_OWNER_DEFAULT;
+      $txtDecimals.textContent = String(SOLCCI_DECIMALS);
+
+      clearPending();
+
+      // Phantom trusted connect
+      await connectPhantom({ silent: true });
+
+      // RPC ready
+      try {
+        await ensureRpcReady();
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e);
+        setStatus("RPC error: " + msg, "ng");
+      }
+
+      // mint program id cache (失敗してもboot継続)
+      try {
+        await ensureMintProgramId(new solanaWeb3.PublicKey(SOLCCI_MINT));
+      } catch (e) {
+        log("WARN: ensureMintProgramId failed: " + ((e && e.message) ? e.message : String(e)));
+      }
+
+      pollPayRequestLoop();
+      log("boot: done");
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      setStatus("boot error: " + msg, "ng");
+    }
+  });
+</script>
+</body>
+</html>
