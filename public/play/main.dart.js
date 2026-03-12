@@ -42420,7 +42420,7 @@ r.kv("initState",s)
 r.Bt()},
 Bt(){var s=0,r=A.B(t.H),q,p=this,o,n,m,l,k,j,i
 var $async$Bt=A.C(function(a,b){if(a===1)return A.y(b,r)
-for(;;)switch(s){case 0:try{l=B.d.bh("")
+for(;;)switch(s){case 0:try{l=B.d.bh("https://solanacci-pay.u093184.workers.dev")
 if(l.length===0)A.a3(A.ax("PAY_BASE_URL \u304c\u672a\u8a2d\u5b9a\u3067\u3059\u3002 --dart-define=PAY_BASE_URL=https://solanacci-pay.u093184.workers.dev \u3092\u6307\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002"))
 k=A.aqT(l)
 if(k!=null)j=!(k.gcY()==="https"||k.gcY()==="http")||B.d.bh(k.gl0()).length===0
