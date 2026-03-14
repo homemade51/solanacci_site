@@ -43040,7 +43040,7 @@ r.vf()},
 vf(){var s=0,r=A.v(t.H),q,p=2,o=[],n=this,m,l,k,j,i,h,g,f,e
 var $async$vf=A.w(function(a,b){if(a===1){o.push(b)
 s=p}for(;;)switch(s){case 0:p=4
-i=B.d.bd("")
+i=B.d.bd("https://solanacci-pay.u093184.workers.dev")
 if(i.length===0)A.a3(A.az("PAY_BASE_URL \u304c\u672a\u8a2d\u5b9a\u3067\u3059\u3002 --dart-define=PAY_BASE_URL=https://solanacci-pay.u093184.workers.dev \u3092\u6307\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002"))
 h=A.ara(i)
 if(h!=null)g=!(h.gcO()==="https"||h.gcO()==="http")||B.d.bd(h.gjT()).length===0
