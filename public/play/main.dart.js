@@ -42579,7 +42579,7 @@ r.lG("initState",s)
 r.BI()},
 BI(){var s=0,r=A.A(t.H),q,p=this,o,n,m,l,k,j,i
 var $async$BI=A.B(function(a,b){if(a===1)return A.x(b,r)
-for(;;)switch(s){case 0:try{l=B.d.bg("")
+for(;;)switch(s){case 0:try{l=B.d.bg("https://solanacci-pay.u093184.workers.dev")
 if(l.length===0)A.a3(A.az("PAY_BASE_URL \u304c\u672a\u8a2d\u5b9a\u3067\u3059\u3002 --dart-define=PAY_BASE_URL=https://solanacci-pay.u093184.workers.dev \u3092\u6307\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002"))
 k=A.awF(l)
 if(k!=null)j=!(k.gcu()==="https"||k.gcu()==="http")||B.d.bg(k.gi7()).length===0
